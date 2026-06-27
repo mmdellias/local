@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Workspace</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,200" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app">
+  <aside id="sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-logo">
+        <span class="material-symbols-outlined logo-icon">workspaces</span>
+        <span class="sidebar-title">Workspace</span>
+      </div>
+    </div>
+    <nav class="sidebar-nav">
+      <a class="nav-item" data-page="tasks" href="#tasks">
+        <span class="material-symbols-outlined">assignment</span>
+        <span>Tarefas</span>
+      </a>
+      <a class="nav-item" data-page="team" href="#team">
+        <span class="material-symbols-outlined">groups</span>
+        <span>Equipe</span>
+      </a>
+      <a class="nav-item" data-page="files" href="#files">
+        <span class="material-symbols-outlined">folder</span>
+        <span>Arquivos</span>
+      </a>
+    </nav>
+    <div class="sidebar-footer">
+      <span class="sidebar-version">v1.0</span>
+    </div>
+  </aside>
+
+  <main id="main-content">
+    <div id="page-tasks" class="page active">
+      <div class="page-inner">
+        <div class="flex flex-col md:flex-row md:items-end justify-between mb-lg gap-sm">
+          <div>
+            <h1 class="font-headline-lg text-headline-lg text-primary mb-xs">Quadro de Tarefas</h1>
+            <p class="font-body-md text-body-md text-on-surface-variant">Gerencie suas tarefas em etapas.</p>
+          </div>
+        </div>
+        <div class="kanban-board" id="kanban-board">
+          <div class="kanban-column" data-column="todo">
+            <div class="kanban-header">
+              <div class="flex items-center gap-xs">
+                <span class="w-2 h-2 rounded-full bg-outline"></span>
+                <h2 class="font-label-sm text-label-sm uppercase tracking-wider text-on-surface-variant">Para Fazer</h2>
+                <span class="badge-count" id="count-todo">0</span>
+              </div>
+
+            </div>
+            <div class="kanban-cards" id="kanban-todo"></div>
+            <button class="dashed-add" onclick="openTaskModal('todo')">
+              <span class="material-symbols-outlined text-[18px]">add</span>
+              Adicionar Tarefa
+            </button>
+          </div>
+          <div class="kanban-column" data-column="in_progress">
+            <div class="kanban-header">
+              <div class="flex items-center gap-xs">
+                <span class="w-2 h-2 rounded-full bg-secondary"></span>
+                <h2 class="font-label-sm text-label-sm uppercase tracking-wider text-on-surface-variant">Em Progresso</h2>
+                <span class="badge-count badge-secondary" id="count-in_progress">0</span>
+              </div>
+
+            </div>
+            <div class="kanban-cards" id="kanban-in_progress"></div>
+            <button class="dashed-add" onclick="openTaskModal('in_progress')">
+              <span class="material-symbols-outlined text-[18px]">add</span>
+              Adicionar Tarefa
+            </button>
+          </div>
+          <div class="kanban-column" data-column="done">
+            <div class="kanban-header">
+              <div class="flex items-center gap-xs">
+                <span class="w-2 h-2 rounded-full bg-secondary"></span>
+                <h2 class="font-label-sm text-label-sm uppercase tracking-wider text-on-surface-variant">Concluído</h2>
+                <span class="badge-count" id="count-done">0</span>
+              </div>
+
+            </div>
+            <div class="kanban-cards" id="kanban-done"></div>
+            <button class="dashed-add" onclick="openTaskModal('done')">
+              <span class="material-symbols-outlined text-[18px]">add</span>
+              Adicionar Tarefa
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="page-team" class="page">
+      <div class="page-inner">
+        <div class="flex flex-col md:flex-row md:items-end justify-between mb-lg gap-sm">
+          <div>
+            <h1 class="font-headline-lg text-headline-lg text-primary mb-xs">Nossa Equipe</h1>
+            <p class="font-body-md text-body-md text-on-surface-variant">Gerencie os membros da sua equipe.</p>
+          </div>
+          <button class="btn-primary" onclick="openMemberModal()">
+            <span class="material-symbols-outlined">person_add</span>
+            Adicionar Membro
+          </button>
+        </div>
+        <div class="team-grid" id="team-grid"></div>
+      </div>
+    </div>
+
+    <div id="page-files" class="page">
+      <div class="page-inner">
+        <div class="flex flex-col md:flex-row md:items-end justify-between mb-lg gap-sm">
+          <div>
+            <h1 class="font-headline-lg text-headline-lg text-primary mb-xs">Explorador de Arquivos</h1>
+            <p class="font-body-md text-body-md text-on-surface-variant">Gerencie e organize seus documentos.</p>
+          </div>
+          <div class="flex items-center gap-sm">
+            <button class="btn-secondary" onclick="openFolderModal()">
+              <span class="material-symbols-outlined text-[20px]">create_new_folder</span>
+              Nova Pasta
+            </button>
+            <button class="btn-primary" onclick="openFileModal()">
+              <span class="material-symbols-outlined text-[20px]">upload</span>
+              Adicionar Arquivo
+            </button>
+          </div>
+        </div>
+        <div class="grid grid-3 gap-sm mb-lg" id="folders-grid"></div>
+        <div class="card-wrapper">
+          <div class="card-header">
+            <h2 class="font-label-md text-label-md text-on-surface">Arquivos Recentes</h2>
+            <div class="flex gap-xs">
+              <button class="btn-icon p-xs rounded-lg hover:bg-surface-container-low"><span class="material-symbols-outlined text-[20px]">grid_view</span></button>
+              <button class="btn-icon p-xs rounded-lg bg-surface-container-highest"><span class="material-symbols-outlined text-[20px] text-secondary">list</span></button>
+            </div>
+          </div>
+          <div class="table-container">
+            <table class="data-table" id="files-table">
+              <thead>
+                <tr>
+                  <th>Nome</th>
+                  <th>Tipo</th>
+                  <th>Tamanho</th>
+                  <th>Data</th>
+                  <th class="text-right">Ações</th>
+                </tr>
+              </thead>
+              <tbody id="files-tbody"></tbody>
+            </table>
+          </div>
+          <div class="card-footer" id="files-footer">
+            <span class="text-label-sm font-label-sm text-outline" id="files-count">Nenhum arquivo</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<div id="modal-overlay" class="modal-overlay hidden" onclick="closeModal()">
+  <div id="modal-container"></div>
+</div>
+
+<script src="script.js"></script>
+</body>
+</html>
