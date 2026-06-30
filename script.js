@@ -1,56 +1,15 @@
-const STORAGE_KEYS = {
-  members: 'workspace_members',
-  tasks: 'workspace_tasks',
-  files: 'workspace_files',
-  folders: 'workspace_folders',
-  activity: 'workspace_activity',
-  settings: 'workspace_settings'
+const api = {
+  async get(url) { const r = await fetch(url); return r.json(); },
+  async post(url, data) { const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }); return r.json(); },
+  async put(url, data) { const r = await fetch(url, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }); return r.json(); },
+  async patch(url, data) { const r = await fetch(url, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }); return r.json(); },
+  async delete(url) { const r = await fetch(url, { method: 'DELETE' }); return r.json(); }
 };
 
-function getData(key) {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEYS[key]);
-    return raw ? JSON.parse(raw) : null;
-  } catch { return null; }
-}
-
-function setData(key, data) {
-  localStorage.setItem(STORAGE_KEYS[key], JSON.stringify(data));
-}
-
-function getDefaults(key) {
-  const defaults = {
-    members: [],
-    tasks: { todo: [], in_progress: [], done: [] },
-    files: [],
-    folders: [],
-    activity: [],
-    settings: { name: 'Meu Workspace' }
-  };
-  return defaults[key];
-}
-
-function load(key) {
-  return getData(key) ?? getDefaults(key);
-}
-
-function save(key, data) {
-  setData(key, data);
-}
+const socket = io();
 
 let state = {};
-function initState() {
-  state.members = load('members');
-  state.tasks = load('tasks');
-  state.files = load('files');
-  state.folders = load('folders');
-  state.activity = load('activity');
-  state.settings = load('settings');
-}
-
-function persist(key) {
-  save(key, state[key]);
-}
+let currentPage = 'tasks';
 
 function uid() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
@@ -78,25 +37,13 @@ function timeAgo(iso) {
   return formatDate(iso);
 }
 
-function addActivity(text, type) {
-  const entry = {
-    id: uid(),
-    text,
-    type: type || 'info',
-    timestamp: now()
-  };
-  state.activity.unshift(entry);
-  if (state.activity.length > 50) state.activity.length = 50;
-  persist('activity');
-}
-
-// Navigation
 function navigateTo(page) {
   window.location.hash = page;
 }
 
 function handleRoute() {
   const page = location.hash.replace('#', '') || 'tasks';
+  currentPage = page;
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   const pageEl = document.getElementById(`page-${page}`);
@@ -120,7 +67,78 @@ function getActivityColor(type) {
   return colors[type] || 'bg-surface-container-high text-on-surface-variant';
 }
 
-// ==================== TASKS (KANBAN) ====================
+socket.on('task:created', task => {
+  if (!state.tasks[task.col]) state.tasks[task.col] = [];
+  state.tasks[task.col].push(task);
+  if (currentPage === 'tasks') renderTasks();
+});
+
+socket.on('task:updated', task => {
+  for (const col of Object.keys(state.tasks)) {
+    state.tasks[col] = state.tasks[col].filter(t => t.id !== task.id);
+  }
+  if (!state.tasks[task.col]) state.tasks[task.col] = [];
+  state.tasks[task.col].push(task);
+  if (currentPage === 'tasks') renderTasks();
+});
+
+socket.on('task:deleted', ({ id }) => {
+  for (const col of Object.keys(state.tasks)) {
+    state.tasks[col] = state.tasks[col].filter(t => t.id !== id);
+  }
+  if (currentPage === 'tasks') renderTasks();
+});
+
+socket.on('task:moved', ({ id, toCol, task }) => {
+  for (const col of Object.keys(state.tasks)) {
+    state.tasks[col] = state.tasks[col].filter(t => t.id !== id);
+  }
+  if (!state.tasks[toCol]) state.tasks[toCol] = [];
+  state.tasks[toCol].push(task);
+  if (currentPage === 'tasks') renderTasks();
+});
+
+socket.on('member:created', member => {
+  state.members.push(member);
+  if (currentPage === 'team') renderTeam();
+});
+
+socket.on('member:updated', member => {
+  const idx = state.members.findIndex(m => m.id === member.id);
+  if (idx !== -1) state.members[idx] = member;
+  if (currentPage === 'team') renderTeam();
+});
+
+socket.on('member:deleted', ({ id }) => {
+  state.members = state.members.filter(m => m.id !== id);
+  if (currentPage === 'team') renderTeam();
+});
+
+socket.on('folder:created', folder => {
+  state.folders.push(folder);
+  if (currentPage === 'files') renderFiles();
+});
+
+socket.on('folder:deleted', ({ id }) => {
+  state.folders = state.folders.filter(f => f.id !== id);
+  if (currentPage === 'files') renderFiles();
+});
+
+socket.on('file:created', file => {
+  state.files.push(file);
+  if (currentPage === 'files') renderFiles();
+});
+
+socket.on('file:deleted', ({ id }) => {
+  state.files = state.files.filter(f => f.id !== id);
+  if (currentPage === 'files') renderFiles();
+});
+
+socket.on('activity:new', activity => {
+  state.activity.unshift(activity);
+  if (state.activity.length > 50) state.activity.length = 50;
+});
+
 function renderTasks() {
   ['todo', 'in_progress', 'done'].forEach(col => {
     const container = document.getElementById(`kanban-${col}`);
@@ -134,7 +152,7 @@ function renderTasks() {
       card.className = `task-card ${col === 'done' ? 'done' : ''}`;
       card.draggable = true;
       card.dataset.taskId = task.id;
-      card.dataset.column = col;
+      card.dataset.col = col;
 
       const category = task.category || 'Geral';
       const [catBg, catText] = getCategoryColor(task.category);
@@ -203,11 +221,7 @@ function moveTask(taskId, fromCol) {
   const cols = ['todo', 'in_progress', 'done'];
   const nextIdx = (cols.indexOf(fromCol) + 1) % cols.length;
   const toCol = cols[nextIdx];
-  state.tasks[fromCol] = state.tasks[fromCol].filter(t => t.id !== taskId);
-  state.tasks[toCol].push(task);
-  persist('tasks');
-  addActivity(`Tarefa "${task.title}" movida para "${getColLabel(toCol)}"`, 'task');
-  renderTasks();
+  api.patch(`/api/tasks/${taskId}/move`, { col: toCol });
 }
 
 function getColLabel(col) {
@@ -217,11 +231,7 @@ function getColLabel(col) {
 
 function deleteTask(taskId, col) {
   if (!confirm('Excluir esta tarefa?')) return;
-  const task = state.tasks[col].find(t => t.id === taskId);
-  state.tasks[col] = state.tasks[col].filter(t => t.id !== taskId);
-  persist('tasks');
-  addActivity(`Tarefa "${task ? task.title : ''}" excluída`, 'task');
-  renderTasks();
+  api.delete(`/api/tasks/${taskId}`);
 }
 
 function setupDragDrop() {
@@ -241,17 +251,10 @@ function setupDragDrop() {
       const dragging = document.querySelector('.dragging');
       if (!dragging) return;
       const taskId = dragging.dataset.taskId;
-      const fromCol = dragging.dataset.column;
-      const toCol = container.closest('.kanban-column').dataset.column;
+      const fromCol = dragging.dataset.col;
+      const toCol = container.closest('.kanban-column').dataset.col;
       if (fromCol !== toCol) {
-        const task = state.tasks[fromCol].find(t => t.id === taskId);
-        if (task) {
-          state.tasks[fromCol] = state.tasks[fromCol].filter(t => t.id !== taskId);
-          state.tasks[toCol].push(task);
-          persist('tasks');
-          addActivity(`Tarefa "${task.title}" movida para "${getColLabel(toCol)}"`, 'task');
-          renderTasks();
-        }
+        api.patch(`/api/tasks/${taskId}/move`, { col: toCol });
       }
     });
   });
@@ -267,10 +270,9 @@ function getDragAfterElement(container, y) {
   }, { offset: Number.NEGATIVE_INFINITY }).element;
 }
 
-// ==================== TASK MODAL ====================
-function openTaskModal(column, editTaskData) {
+function openTaskModal(col, editTaskData) {
   const title = editTaskData ? 'Editar Tarefa' : 'Nova Tarefa';
-  const task = editTaskData || { title: '', description: '', category: '', dueDate: '', assigneeId: '', column };
+  const task = editTaskData || { title: '', description: '', category: '', dueDate: '', assigneeId: '', col };
 
   const container = document.getElementById('modal-container');
   const memberOptions = state.members.map(m =>
@@ -317,50 +319,42 @@ function openTaskModal(column, editTaskData) {
       </div>
       <div class="modal-footer">
         <button class="btn-secondary" onclick="closeModal()">Cancelar</button>
-        <button class="btn-primary" onclick="${editTaskData ? `saveTaskEdit('${task.id}', '${column}')` : `saveTask('${column}')`}">${editTaskData ? 'Salvar' : 'Criar'}</button>
+        <button class="btn-primary" onclick="${editTaskData ? `saveTaskEdit('${task.id}', '${col}')` : `saveTask('${col}')`}">${editTaskData ? 'Salvar' : 'Criar'}</button>
       </div>
     </div>
   `;
   document.getElementById('modal-overlay').classList.remove('hidden');
 }
 
-function saveTask(column) {
+function saveTask(col) {
   const title = document.getElementById('task-title').value.trim();
   if (!title) { alert('O título é obrigatório.'); return; }
 
-  const task = {
-    id: uid(),
+  api.post('/api/tasks', {
     title,
     description: document.getElementById('task-desc').value.trim(),
     category: document.getElementById('task-category').value,
     dueDate: document.getElementById('task-date').value,
     assigneeId: document.getElementById('task-assignee').value,
-    createdAt: now()
-  };
+    col
+  });
 
-  state.tasks[column].push(task);
-  persist('tasks');
-  addActivity(`Nova tarefa "${title}" adicionada`, 'task');
   closeModal();
-  renderTasks();
 }
 
 function saveTaskEdit(taskId, col) {
   const title = document.getElementById('task-title').value.trim();
   if (!title) { alert('O título é obrigatório.'); return; }
 
-  const task = state.tasks[col].find(t => t.id === taskId);
-  if (task) {
-    task.title = title;
-    task.description = document.getElementById('task-desc').value.trim();
-    task.category = document.getElementById('task-category').value;
-    task.dueDate = document.getElementById('task-date').value;
-    task.assigneeId = document.getElementById('task-assignee').value;
-    persist('tasks');
-    addActivity(`Tarefa "${title}" atualizada`, 'task');
-  }
+  api.put(`/api/tasks/${taskId}`, {
+    title,
+    description: document.getElementById('task-desc').value.trim(),
+    category: document.getElementById('task-category').value,
+    dueDate: document.getElementById('task-date').value,
+    assigneeId: document.getElementById('task-assignee').value
+  });
+
   closeModal();
-  renderTasks();
 }
 
 function editTask(taskId, col) {
@@ -368,7 +362,6 @@ function editTask(taskId, col) {
   if (task) openTaskModal(col, task);
 }
 
-// ==================== TEAM ====================
 function renderTeam() {
   const grid = document.getElementById('team-grid');
   grid.innerHTML = '';
@@ -541,38 +534,33 @@ function saveMember() {
   const name = document.getElementById('member-name').value.trim();
   if (!name) { alert('O nome é obrigatório.'); return; }
 
-  state.members.push({
-    id: uid(),
+  api.post('/api/members', {
     name,
     email: document.getElementById('member-email').value.trim(),
     role: document.getElementById('member-role').value.trim(),
     status: document.getElementById('member-status').value,
     photo: _currentPhoto || ''
   });
+
   _currentPhoto = '';
-  persist('members');
-  addActivity(`Membro "${name}" adicionado à equipe`, 'member');
   closeModal();
-  renderTeam();
 }
 
 function saveMemberEdit(id) {
   const name = document.getElementById('member-name').value.trim();
   if (!name) { alert('O nome é obrigatório.'); return; }
 
-  const m = state.members.find(x => x.id === id);
-  if (m) {
-    m.name = name;
-    m.email = document.getElementById('member-email').value.trim();
-    m.role = document.getElementById('member-role').value.trim();
-    m.status = document.getElementById('member-status').value;
-    if (_currentPhoto) m.photo = _currentPhoto;
-    _currentPhoto = '';
-    persist('members');
-    addActivity(`Membro "${name}" atualizado`, 'member');
-  }
+  const body = {
+    name,
+    email: document.getElementById('member-email').value.trim(),
+    role: document.getElementById('member-role').value.trim(),
+    status: document.getElementById('member-status').value
+  };
+  if (_currentPhoto) body.photo = _currentPhoto;
+
+  api.put(`/api/members/${id}`, body);
+  _currentPhoto = '';
   closeModal();
-  renderTeam();
 }
 
 function editMember(id) {
@@ -582,14 +570,9 @@ function editMember(id) {
 
 function deleteMember(id) {
   if (!confirm('Remover este membro?')) return;
-  const m = state.members.find(x => x.id === id);
-  state.members = state.members.filter(x => x.id !== id);
-  persist('members');
-  addActivity(`Membro "${m ? m.name : ''}" removido`, 'member');
-  renderTeam();
+  api.delete(`/api/members/${id}`);
 }
 
-// ==================== FILES ====================
 function renderFiles() {
   const foldersGrid = document.getElementById('folders-grid');
   foldersGrid.innerHTML = '';
@@ -597,10 +580,7 @@ function renderFiles() {
   const filesTbody = document.getElementById('files-tbody');
   const filesCount = document.getElementById('files-count');
 
-  // Render folders
-  if (state.folders.length === 0) {
-    // no folders yet — show nothing in grid area
-  } else {
+  if (state.folders.length > 0) {
     state.folders.forEach(f => {
       const fileCount = state.files.filter(file => file.folderId === f.id).length;
       const div = document.createElement('div');
@@ -617,7 +597,6 @@ function renderFiles() {
     });
   }
 
-  // Render files table
   if (state.files.length === 0) {
     filesTbody.innerHTML = `
       <tr><td colspan="5" class="text-center text-on-surface-variant font-label-md" style="padding:32px">Nenhum arquivo adicionado.</td></tr>
@@ -732,24 +711,17 @@ function saveFolder() {
   const name = document.getElementById('folder-name').value.trim();
   if (!name) { alert('O nome é obrigatório.'); return; }
 
-  state.folders.push({
-    id: uid(),
+  api.post('/api/folders', {
     name,
     color: document.getElementById('folder-color').value
   });
-  persist('folders');
-  addActivity(`Pasta "${name}" criada`, 'folder');
+
   closeModal();
-  renderFiles();
 }
 
 function deleteFolder(id) {
   if (!confirm('Excluir esta pasta?')) return;
-  const f = state.folders.find(x => x.id === id);
-  state.folders = state.folders.filter(x => x.id !== id);
-  persist('folders');
-  addActivity(`Pasta "${f ? f.name : ''}" excluída`, 'folder');
-  renderFiles();
+  api.delete(`/api/folders/${id}`);
 }
 
 let _selectedFile = null;
@@ -862,39 +834,29 @@ function saveFile() {
   if (!_selectedFile) { alert('Selecione um arquivo primeiro.'); return; }
 
   const f = _selectedFile;
-  state.files.push({
-    id: uid(),
+  api.post('/api/files', {
     name: f.name,
     type: f.type,
     size: f.size,
     sizeLabel: formatFileSize(f.size),
     data: f.data,
-    folderId: document.getElementById('file-folder').value,
-    date: now()
+    folderId: document.getElementById('file-folder').value
   });
+
   _selectedFile = null;
-  persist('files');
-  addActivity(`Arquivo "${f.name}" adicionado`, 'file');
   closeModal();
-  renderFiles();
 }
 
 function deleteFile(id) {
   if (!confirm('Excluir este arquivo?')) return;
-  const f = state.files.find(x => x.id === id);
-  state.files = state.files.filter(x => x.id !== id);
-  persist('files');
-  addActivity(`Arquivo "${f ? f.name : ''}" excluído`, 'file');
-  renderFiles();
+  api.delete(`/api/files/${id}`);
 }
 
-// ==================== MODAL ====================
 function closeModal() {
   document.getElementById('modal-overlay').classList.add('hidden');
   document.getElementById('modal-container').innerHTML = '';
 }
 
-// ==================== UTILS ====================
 function escapeHtml(str) {
   if (!str) return '';
   const div = document.createElement('div');
@@ -902,7 +864,33 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
-// ==================== INIT ====================
-initState();
-window.addEventListener('hashchange', handleRoute);
-handleRoute();
+async function initApp() {
+  try {
+    const [members, tasks, files, folders, activity, settings] = await Promise.all([
+      api.get('/api/members'),
+      api.get('/api/tasks'),
+      api.get('/api/files'),
+      api.get('/api/folders'),
+      api.get('/api/activity'),
+      api.get('/api/settings')
+    ]);
+
+    state.members = members;
+    state.tasks = { todo: [], in_progress: [], done: [] };
+    tasks.forEach(task => {
+      if (!state.tasks[task.col]) state.tasks[task.col] = [];
+      state.tasks[task.col].push(task);
+    });
+    state.files = files;
+    state.folders = folders;
+    state.activity = activity;
+    state.settings = settings;
+
+    window.addEventListener('hashchange', handleRoute);
+    handleRoute();
+  } catch (err) {
+    console.error('Erro ao carregar dados:', err);
+  }
+}
+
+initApp();

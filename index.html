@@ -48,7 +48,7 @@
           </div>
         </div>
         <div class="kanban-board" id="kanban-board">
-          <div class="kanban-column" data-column="todo">
+          <div class="kanban-column" data-col="todo">
             <div class="kanban-header">
               <div class="flex items-center gap-xs">
                 <span class="w-2 h-2 rounded-full bg-outline"></span>
@@ -63,7 +63,7 @@
               Adicionar Tarefa
             </button>
           </div>
-          <div class="kanban-column" data-column="in_progress">
+          <div class="kanban-column" data-col="in_progress">
             <div class="kanban-header">
               <div class="flex items-center gap-xs">
                 <span class="w-2 h-2 rounded-full bg-secondary"></span>
@@ -78,7 +78,7 @@
               Adicionar Tarefa
             </button>
           </div>
-          <div class="kanban-column" data-column="done">
+          <div class="kanban-column" data-col="done">
             <div class="kanban-header">
               <div class="flex items-center gap-xs">
                 <span class="w-2 h-2 rounded-full bg-secondary"></span>
@@ -167,6 +167,7 @@
   <div id="modal-container"></div>
 </div>
 
+<script src="/socket.io/socket.io.js"></script>
 <script src="script.js"></script>
 </body>
 </html>
