@@ -3,6 +3,18 @@ const http = require('http');
 const { Server } = require('socket.io');
 const { initDb, all, get, run } = require('./db');
 const path = require('path');
+const fs = require('fs');
+
+const Layer = require('express/lib/router/layer');
+const originalHandle = Layer.prototype.handle_request;
+Layer.prototype.handle_request = function(req, res, next) {
+  const fn = this.handle;
+  if (fn.length > 3) return next();
+  try {
+    const result = fn(req, res, next);
+    if (result && typeof result.catch === 'function') result.catch(next);
+  } catch (err) { next(err); }
+};
 
 async function start() {
   await initDb();
@@ -11,7 +23,10 @@ async function start() {
   const server = http.createServer(app);
   const io = new Server(server);
 
-  app.use(express.json({ limit: '10mb' }));
+  const uploadsDir = path.join(__dirname, 'uploads');
+  if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
+  app.use('/uploads', express.static(uploadsDir));
+  app.use(express.json({ limit: '5mb' }));
   app.use(express.static(path.join(__dirname)));
 
   async function createActivity(text, type) {
@@ -140,9 +155,23 @@ async function start() {
 
   app.post('/api/files', async (req, res) => {
     const { name, type, size, sizeLabel, data, folderId } = req.body;
+    if (!data) return res.status(400).json({ error: 'Dados do arquivo são obrigatórios' });
+    if (size > 2 * 1024 * 1024) return res.status(400).json({ error: 'Arquivo deve ter no máximo 2MB' });
+
     const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
     const date = new Date().toISOString();
-    await run('INSERT INTO files (id, name, type, size, sizeLabel, data, folderId, date) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)', [id, name, type || '', size || 0, sizeLabel || '', data || '', folderId || '', date]);
+
+    const matches = data.match(/^data:([^;]+);base64,(.+)$/);
+    let diskPath = '';
+    if (matches) {
+      const ext = path.extname(name) || '';
+      const safeName = id + ext;
+      const buffer = Buffer.from(matches[2], 'base64');
+      fs.writeFileSync(path.join(uploadsDir, safeName), buffer);
+      diskPath = safeName;
+    }
+
+    await run('INSERT INTO files (id, name, type, size, sizeLabel, data, folderId, date) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)', [id, name, type || '', size || 0, sizeLabel || '', diskPath, folderId || '', date]);
     const file = await get('SELECT * FROM files WHERE id = $1', [id]);
     const activity = await createActivity(`Arquivo "${name}" adicionado`, 'file');
     io.emit('file:created', file);
@@ -150,9 +179,21 @@ async function start() {
     res.json(file);
   });
 
+  app.get('/api/files/:id/download', async (req, res) => {
+    const file = await get('SELECT * FROM files WHERE id = $1', [req.params.id]);
+    if (!file || !file.data) return res.status(404).json({ error: 'Arquivo não encontrado' });
+    const filePath = path.join(uploadsDir, file.data);
+    if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'Arquivo não encontrado no disco' });
+    res.download(filePath, file.name);
+  });
+
   app.delete('/api/files/:id', async (req, res) => {
     const existing = await get('SELECT * FROM files WHERE id = $1', [req.params.id]);
     if (!existing) return res.status(404).json({ error: 'File not found' });
+    if (existing.data) {
+      const filePath = path.join(uploadsDir, existing.data);
+      if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+    }
     await run('DELETE FROM files WHERE id = $1', [req.params.id]);
     const activity = await createActivity(`Arquivo "${existing.name}" excluído`, 'file');
     io.emit('file:deleted', { id: req.params.id });
@@ -176,6 +217,11 @@ async function start() {
     await run('DELETE FROM settings WHERE key = $1', [key]);
     await run('INSERT INTO settings (key, value) VALUES ($1, $2)', [key, value]);
     res.json({ success: true });
+  });
+
+  app.use((err, req, res, next) => {
+    console.error('Erro no servidor:', err);
+    res.status(500).json({ error: err.message || 'Erro interno do servidor' });
   });
 
   const PORT = process.env.PORT || 3000;

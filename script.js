@@ -636,14 +636,12 @@ function renderFiles() {
 }
 
 function downloadFile(id) {
-  const f = state.files.find(x => x.id === id);
-  if (!f || !f.data) return;
-  const link = document.createElement('a');
-  link.href = f.data;
-  link.download = f.name;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
+  const a = document.createElement('a');
+  a.href = `/api/files/${id}/download`;
+  a.download = '';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
 }
 
 function formatFileSize(bytes) {
@@ -760,6 +758,10 @@ function openFileModal() {
           </div>
         </div>
         <div class="form-group">
+          <label class="form-label">Nome do Arquivo</label>
+          <input type="text" class="form-input" id="file-name-input" placeholder="Nome do arquivo" />
+        </div>
+        <div class="form-group">
           <label class="form-label">Pasta</label>
           <select class="form-select" id="file-folder">
             <option value="">Nenhuma</option>
@@ -783,6 +785,8 @@ function selectFile(event) {
 
   const reader = new FileReader();
   reader.onload = function(e) {
+    const origName = file.name.replace(/\.[^.]+$/, '');
+    document.getElementById('file-name-input').value = origName;
     _selectedFile = {
       name: file.name,
       type: detectFileType(file.name),
@@ -823,19 +827,22 @@ function removeSelectedFile() {
   const hint = document.getElementById('file-upload-hint');
   const info = document.getElementById('file-info');
   const input = document.getElementById('file-input');
+  const nameInput = document.getElementById('file-name-input');
   if (!area) return;
   icon.style.display = '';
   hint.textContent = 'Clique para selecionar ou arraste um arquivo';
   info.classList.add('hidden');
   if (input) input.value = '';
+  if (nameInput) nameInput.value = '';
 }
 
 function saveFile() {
   if (!_selectedFile) { alert('Selecione um arquivo primeiro.'); return; }
 
   const f = _selectedFile;
+  const customName = document.getElementById('file-name-input').value.trim() || f.name;
   api.post('/api/files', {
-    name: f.name,
+    name: customName,
     type: f.type,
     size: f.size,
     sizeLabel: formatFileSize(f.size),
