@@ -54,16 +54,17 @@ function handleRoute() {
     case 'tasks': renderTasks(); break;
     case 'team': renderTeam(); break;
     case 'files': renderFiles(); break;
+    case 'links': renderLinks(); break;
   }
 }
 
 function getActivityIcon(type) {
-  const icons = { comment: 'comment', upload: 'upload_file', complete: 'check_circle', urgent: 'priority_high', task: 'assignment', member: 'person', folder: 'folder', file: 'description' };
+  const icons = { comment: 'comment', upload: 'upload_file', complete: 'check_circle', urgent: 'priority_high', task: 'assignment', member: 'person', folder: 'folder', file: 'description', link: 'link' };
   return icons[type] || 'info';
 }
 
 function getActivityColor(type) {
-  const colors = { comment: 'bg-secondary-container text-on-secondary-container', upload: 'bg-secondary-container text-on-secondary-container', complete: 'bg-secondary-container text-on-secondary-container', urgent: 'bg-error-container text-on-error-container', task: 'bg-primary-container text-on-primary-container', member: 'bg-secondary-container text-on-secondary-container', folder: 'bg-surface-container-high text-on-surface-variant', file: 'bg-surface-container-high text-on-surface-variant' };
+  const colors = { comment: 'bg-secondary-container text-on-secondary-container', upload: 'bg-secondary-container text-on-secondary-container', complete: 'bg-secondary-container text-on-secondary-container', urgent: 'bg-error-container text-on-error-container', task: 'bg-primary-container text-on-primary-container', member: 'bg-secondary-container text-on-secondary-container', folder: 'bg-surface-container-high text-on-surface-variant', file: 'bg-surface-container-high text-on-surface-variant', link: 'bg-secondary-container text-on-secondary-container' };
   return colors[type] || 'bg-surface-container-high text-on-surface-variant';
 }
 
@@ -132,6 +133,22 @@ socket.on('file:created', file => {
 socket.on('file:deleted', ({ id }) => {
   state.files = state.files.filter(f => f.id !== id);
   if (currentPage === 'files') renderFiles();
+});
+
+socket.on('link:created', link => {
+  state.links.unshift(link);
+  if (currentPage === 'links') renderLinks();
+});
+
+socket.on('link:updated', link => {
+  const idx = state.links.findIndex(l => l.id === link.id);
+  if (idx !== -1) state.links[idx] = link;
+  if (currentPage === 'links') renderLinks();
+});
+
+socket.on('link:deleted', ({ id }) => {
+  state.links = state.links.filter(l => l.id !== id);
+  if (currentPage === 'links') renderLinks();
 });
 
 socket.on('activity:new', activity => {
@@ -859,6 +876,146 @@ function deleteFile(id) {
   api.delete(`/api/files/${id}`);
 }
 
+function getLinkFavicon(url) {
+  try {
+    const u = new URL(url);
+    return `https://www.google.com/s2/favicons?domain=${u.hostname}&sz=64`;
+  } catch {
+    return '';
+  }
+}
+
+function renderLinks() {
+  const grid = document.getElementById('links-grid');
+  grid.innerHTML = '';
+
+  if (state.links.length === 0) {
+    grid.innerHTML = `
+      <div class="empty-state">
+        <span class="material-symbols-outlined">link</span>
+        <p class="font-headline-md text-headline-md mb-xs">Nenhum link ainda</p>
+        <p class="font-label-md text-label-md text-on-surface-variant">Adicione links úteis para acessar rapidamente.</p>
+      </div>
+    `;
+    return;
+  }
+
+  state.links.forEach(link => {
+    const card = document.createElement('div');
+    card.className = 'link-card';
+    const favicon = getLinkFavicon(link.url);
+    const hostname = (() => { try { return new URL(link.url).hostname } catch { return link.url } })();
+    card.innerHTML = `
+      <div class="link-card-body">
+        <div class="link-icon-wrapper">
+          ${favicon ? `<img class="link-favicon" src="${favicon}" alt="" onerror="this.style.display='none'">` : `<span class="material-symbols-outlined link-placeholder-icon">link</span>`}
+        </div>
+        <div class="link-info">
+          <h3 class="font-label-md text-label-md text-on-surface truncate">${escapeHtml(link.title)}</h3>
+          <span class="text-label-sm font-label-sm text-outline truncate">${escapeHtml(hostname)}</span>
+        </div>
+        ${link.category ? `<span class="link-category-badge">${escapeHtml(link.category)}</span>` : ''}
+      </div>
+      ${link.description ? `<p class="text-body-md text-on-surface-variant link-desc">${escapeHtml(link.description)}</p>` : ''}
+      <div class="link-card-footer">
+        <a href="${escapeHtml(link.url)}" target="_blank" rel="noopener" class="link-visit-btn" onclick="event.stopPropagation()">
+          <span class="material-symbols-outlined">open_in_new</span>
+          Acessar
+        </a>
+        <div class="flex items-center gap-xs">
+          <button class="btn-icon" onclick="event.stopPropagation();editLink('${link.id}')" title="Editar">
+            <span class="material-symbols-outlined text-[18px]">edit</span>
+          </button>
+          <button class="btn-icon danger" onclick="event.stopPropagation();deleteLink('${link.id}')" title="Excluir">
+            <span class="material-symbols-outlined text-[18px]">delete</span>
+          </button>
+        </div>
+      </div>
+    `;
+    grid.appendChild(card);
+  });
+}
+
+function openLinkModal(editData) {
+  const title = editData ? 'Editar Link' : 'Adicionar Link';
+  const link = editData || { title: '', url: '', description: '', category: '' };
+
+  const container = document.getElementById('modal-container');
+  container.innerHTML = `
+    <div class="modal" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <h3 class="font-headline-md text-headline-md">${title}</h3>
+        <button class="close-btn" onclick="closeModal()"><span class="material-symbols-outlined">close</span></button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label">Título</label>
+          <input class="form-input" id="link-title" value="${escapeHtml(link.title)}" placeholder="Nome do link">
+        </div>
+        <div class="form-group">
+          <label class="form-label">URL</label>
+          <input class="form-input" id="link-url" value="${escapeHtml(link.url)}" placeholder="https://exemplo.com">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Descrição</label>
+          <textarea class="form-input" id="link-desc" placeholder="Descrição (opcional)">${escapeHtml(link.description || '')}</textarea>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Categoria</label>
+          <input class="form-input" id="link-category" value="${escapeHtml(link.category || '')}" placeholder="Ex: Design, Dev, Estudo">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" onclick="closeModal()">Cancelar</button>
+        <button class="btn-primary" onclick="${editData ? `saveLinkEdit('${link.id}')` : 'saveLink()'}">${editData ? 'Salvar' : 'Adicionar'}</button>
+      </div>
+    </div>
+  `;
+  document.getElementById('modal-overlay').classList.remove('hidden');
+}
+
+function saveLink() {
+  const title = document.getElementById('link-title').value.trim();
+  const url = document.getElementById('link-url').value.trim();
+  if (!title) { alert('O título é obrigatório.'); return; }
+  if (!url) { alert('A URL é obrigatória.'); return; }
+
+  api.post('/api/links', {
+    title,
+    url,
+    description: document.getElementById('link-desc').value.trim(),
+    category: document.getElementById('link-category').value.trim()
+  });
+
+  closeModal();
+}
+
+function saveLinkEdit(id) {
+  const title = document.getElementById('link-title').value.trim();
+  const url = document.getElementById('link-url').value.trim();
+  if (!title) { alert('O título é obrigatório.'); return; }
+  if (!url) { alert('A URL é obrigatória.'); return; }
+
+  api.put(`/api/links/${id}`, {
+    title,
+    url,
+    description: document.getElementById('link-desc').value.trim(),
+    category: document.getElementById('link-category').value.trim()
+  });
+
+  closeModal();
+}
+
+function editLink(id) {
+  const link = state.links.find(l => l.id === id);
+  if (link) openLinkModal(link);
+}
+
+function deleteLink(id) {
+  if (!confirm('Excluir este link?')) return;
+  api.delete(`/api/links/${id}`);
+}
+
 function closeModal() {
   document.getElementById('modal-overlay').classList.add('hidden');
   document.getElementById('modal-container').innerHTML = '';
@@ -873,13 +1030,14 @@ function escapeHtml(str) {
 
 async function initApp() {
   try {
-    const [members, tasks, files, folders, activity, settings] = await Promise.all([
+    const [members, tasks, files, folders, activity, settings, links] = await Promise.all([
       api.get('/api/members'),
       api.get('/api/tasks'),
       api.get('/api/files'),
       api.get('/api/folders'),
       api.get('/api/activity'),
-      api.get('/api/settings')
+      api.get('/api/settings'),
+      api.get('/api/links')
     ]);
 
     state.members = members;
@@ -892,6 +1050,7 @@ async function initApp() {
     state.folders = folders;
     state.activity = activity;
     state.settings = settings;
+    state.links = links;
 
     window.addEventListener('hashchange', handleRoute);
     handleRoute();

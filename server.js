@@ -149,6 +149,45 @@ async function start() {
     res.json({ success: true });
   });
 
+  app.get('/api/links', async (req, res) => {
+    res.json(await all('SELECT * FROM links ORDER BY createdAt DESC'));
+  });
+
+  app.post('/api/links', async (req, res) => {
+    const { title, url, description, category } = req.body;
+    if (!title || !url) return res.status(400).json({ error: 'Título e URL são obrigatórios' });
+    const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+    const createdAt = new Date().toISOString();
+    await run('INSERT INTO links (id, title, url, description, category, createdAt) VALUES ($1, $2, $3, $4, $5, $6)', [id, title, url, description || '', category || '', createdAt]);
+    const link = await get('SELECT * FROM links WHERE id = $1', [id]);
+    const activity = await createActivity(`Link "${title}" adicionado`, 'link');
+    io.emit('link:created', link);
+    io.emit('activity:new', activity);
+    res.json(link);
+  });
+
+  app.put('/api/links/:id', async (req, res) => {
+    const { title, url, description, category } = req.body;
+    const existing = await get('SELECT * FROM links WHERE id = $1', [req.params.id]);
+    if (!existing) return res.status(404).json({ error: 'Link not found' });
+    await run('UPDATE links SET title = $1, url = $2, description = $3, category = $4 WHERE id = $5', [title, url, description || '', category || '', req.params.id]);
+    const link = await get('SELECT * FROM links WHERE id = $1', [req.params.id]);
+    const activity = await createActivity(`Link "${title}" atualizado`, 'link');
+    io.emit('link:updated', link);
+    io.emit('activity:new', activity);
+    res.json(link);
+  });
+
+  app.delete('/api/links/:id', async (req, res) => {
+    const existing = await get('SELECT * FROM links WHERE id = $1', [req.params.id]);
+    if (!existing) return res.status(404).json({ error: 'Link not found' });
+    await run('DELETE FROM links WHERE id = $1', [req.params.id]);
+    const activity = await createActivity(`Link "${existing.title}" removido`, 'link');
+    io.emit('link:deleted', { id: req.params.id });
+    io.emit('activity:new', activity);
+    res.json({ success: true });
+  });
+
   app.get('/api/files', async (req, res) => {
     res.json(await all('SELECT * FROM files'));
   });

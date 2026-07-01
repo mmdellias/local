@@ -51,6 +51,16 @@ async function initDb() {
       )
     `);
     await pool.query(`
+      CREATE TABLE IF NOT EXISTS links (
+        id TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        url TEXT NOT NULL,
+        description TEXT DEFAULT '',
+        category TEXT DEFAULT '',
+        createdAt TEXT NOT NULL
+      )
+    `);
+    await pool.query(`
       CREATE TABLE IF NOT EXISTS activity (
         id TEXT PRIMARY KEY,
         text TEXT NOT NULL,
@@ -95,6 +105,10 @@ async function initDb() {
       id TEXT PRIMARY KEY, name TEXT NOT NULL, type TEXT DEFAULT '',
       size REAL DEFAULT 0, sizeLabel TEXT DEFAULT '', data TEXT DEFAULT '',
       folderId TEXT DEFAULT '', date TEXT NOT NULL
+    )`);
+    db.run(`CREATE TABLE IF NOT EXISTS links (
+      id TEXT PRIMARY KEY, title TEXT NOT NULL, url TEXT NOT NULL,
+      description TEXT DEFAULT '', category TEXT DEFAULT '', createdAt TEXT NOT NULL
     )`);
     db.run(`CREATE TABLE IF NOT EXISTS activity (
       id TEXT PRIMARY KEY, text TEXT NOT NULL, type TEXT DEFAULT 'info',

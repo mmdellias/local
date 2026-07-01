@@ -32,6 +32,10 @@
         <span class="material-symbols-outlined">folder</span>
         <span>Arquivos</span>
       </a>
+      <a class="nav-item" data-page="links" href="#links">
+        <span class="material-symbols-outlined">link</span>
+        <span>Links</span>
+      </a>
     </nav>
     <div class="sidebar-footer">
       <span class="sidebar-version">v1.0</span>
@@ -158,6 +162,22 @@
             <span class="text-label-sm font-label-sm text-outline" id="files-count">Nenhum arquivo</span>
           </div>
         </div>
+      </div>
+    </div>
+
+    <div id="page-links" class="page">
+      <div class="page-inner">
+        <div class="flex flex-col md:flex-row md:items-end justify-between mb-lg gap-sm">
+          <div>
+            <h1 class="font-headline-lg text-headline-lg text-primary mb-xs">Links Úteis</h1>
+            <p class="font-body-md text-body-md text-on-surface-variant">Salve e organize seus links favoritos.</p>
+          </div>
+          <button class="btn-primary" onclick="openLinkModal()">
+            <span class="material-symbols-outlined">add</span>
+            Adicionar Link
+          </button>
+        </div>
+        <div class="links-grid" id="links-grid"></div>
       </div>
     </div>
   </main>
