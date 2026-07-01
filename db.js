@@ -130,22 +130,12 @@ async function get(sql, params) {
   return rows.length > 0 ? rows[0] : null;
 }
 
-let saveTimeout = null;
-
-function scheduleSave() {
-  if (saveTimeout) clearTimeout(saveTimeout);
-  saveTimeout = setTimeout(() => {
-    saveSqlite();
-    saveTimeout = null;
-  }, 2000);
-}
-
 async function run(sql, params) {
   if (isPostgres) {
     await db.query(sql, params || []);
   } else {
     db.run(toSqlite(sql), params || []);
-    scheduleSave();
+    saveSqlite();
   }
 }
 
@@ -157,16 +147,8 @@ function saveSqlite() {
   }
 }
 
-function saveImmediate() {
-  if (saveTimeout) {
-    clearTimeout(saveTimeout);
-    saveTimeout = null;
-  }
-  saveSqlite();
-}
-
-process.on('exit', saveImmediate);
-process.on('SIGINT', () => { saveImmediate(); process.exit(); });
-process.on('SIGTERM', () => { saveImmediate(); process.exit(); });
+process.on('exit', saveSqlite);
+process.on('SIGINT', () => { saveSqlite(); process.exit(); });
+process.on('SIGTERM', () => { saveSqlite(); process.exit(); });
 
 module.exports = { initDb, all, get, run, isPostgres };
