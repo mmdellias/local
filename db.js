@@ -7,7 +7,7 @@ async function initDb() {
   if (process.env.DATABASE_URL) {
     isPostgres = true;
     const { Pool } = require('pg');
-    const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+    const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS members (
