@@ -120,6 +120,14 @@ async function initDb() {
   }
 }
 
+const PG_KEY_MAP = {
+  duedate: 'dueDate',
+  assigneeid: 'assigneeId',
+  createdat: 'createdAt',
+  folderid: 'folderId',
+  sizelabel: 'sizeLabel'
+};
+
 function toSqlite(sql) {
   return sql.replace(/\$(\d+)/g, () => '?');
 }
@@ -127,7 +135,13 @@ function toSqlite(sql) {
 async function all(sql, params) {
   if (isPostgres) {
     const result = await db.query(sql, params || []);
-    return result.rows;
+    return result.rows.map(row => {
+      const mapped = {};
+      for (const [key, val] of Object.entries(row)) {
+        mapped[PG_KEY_MAP[key] || key] = val;
+      }
+      return mapped;
+    });
   }
   const stmt = db.prepare(toSqlite(sql));
   if (params && params.length > 0) stmt.bind(params);
